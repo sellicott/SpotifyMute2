@@ -10,15 +10,15 @@ AccessModifierOffset: -4
 # Basic general rules
 ColumnLimit: '80'
 TabWidth: 4
-UseTab: AlignWithSpaces 
+UseTab: Never
 BreakBeforeBraces: Allman
 PointerAlignment: Right
 MaxEmptyLinesToKeep: 2
 IndentCaseLabels: true
 
 # Allignment rules
-AlignAfterOpenBracket: DontAlign
-AlignTrailingComments: false
+AlignAfterOpenBracket: Align
+AlignTrailingComments: true 
 AlignConsecutiveAssignments: false
 AlignConsecutiveMacros: false
 AlignEscapedNewlines: Left
@@ -35,12 +35,17 @@ SpacesInSquareBrackets: false
 # Short statement rules
 AllowShortBlocksOnASingleLine: Never 
 AllowShortIfStatementsOnASingleLine: Never 
-AllowShortCaseLabelsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: false 
 AllowShortLoopsOnASingleLine: true
+
+# function parameter packing arguments
+BinPackParameters: false
+BinPackArguments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
 
 # Other Rules
 FixNamespaceComments: true
-AllowAllParametersOfDeclarationOnNextLine: false
 AlwaysBreakTemplateDeclarations: 'Yes'
 BreakBeforeBinaryOperators: None
 BreakConstructorInitializers: BeforeComma
