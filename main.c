@@ -21,7 +21,7 @@
 
 // based on the documentation the application will display itself with it's name
 // const char *spotify_dbus_name =
-// "org.mpris.MediaPlayer2.firefox.instance1804";
+// "org.mpris.MediaPlayer2.firefox.instance161006";
 const char *spotify_dbus_name = "org.mpris.MediaPlayer2.spotify";
 const char *spotify_dbus_path = "/org/mpris/MediaPlayer2";
 const char *spotify_dbus_interface = "org.mpris.MediaPlayer2.Player";
@@ -67,6 +67,14 @@ int is_spotify_availible( sd_bus *bus_ptr, char ***instance_names )
     // loop through and list all names
     for ( int i = 0; bus_names[i]; ++i )
     {
+        const char *media_player_substr = "org.mpris.MediaPlayer2";
+        if ( strncmp( media_player_substr,
+                      bus_names[i],
+                      strlen( media_player_substr ) ) == 0 )
+        {
+            printf( "media instance: %s\n", bus_names[i] );
+        }
+
         // check if spotify is on the bus
         if ( strcmp( spotify_dbus_name, bus_names[i] ) == 0 )
         {
@@ -199,29 +207,11 @@ int main( int argc, char **argv )
     }
 
     printf( "%20s \n", "Metadata:" );
-    for ( int i = 0; i < metadata->len; ++i )
-    {
-        dbus_sv_t *sv = &metadata->sv_array[i];
-        if ( sv->v_type == 's' )
-        {
-            printf( "%20s: %s\n", sv->s, sv->v.s );
-        }
-        else if ( sv->v_type == 'd' )
-        {
-            printf( "%20s: %lf\n", sv->s, sv->v.d );
-        }
-        else if ( sv->v_type == 'i' )
-        {
-            printf( "%20s: %d\n", sv->s, sv->v.i );
-        }
-        else
-        {
-            printf( "%20s: null\n", sv->s );
-        }
-    }
+    bus_print_sv_array( metadata );
 
 cleanup_instances:
     FREE_DBUS_STRV( instance_names );
+    bus_free_sv_array( &metadata );
 
 cleanup:
     sd_bus_error_free( &error );
