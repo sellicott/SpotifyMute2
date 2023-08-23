@@ -2,7 +2,7 @@
 
 PROJECT := spotify_mute
 
-SRCS := main.c dbus_utils.c
+SRCS := main.c dbus_utils.c pactl.c
 INCLUDES := include
 
 # source transformation
@@ -24,7 +24,7 @@ CFLAGS := \
     $(DEBUG) \
     -fno-omit-frame-pointer -ffloat-store -fno-common -fstrict-aliasing 
 
-PKGCONFIG_LIBS := `pkg-config --cflags --libs libsystemd`
+PKGCONFIG_LIBS := `pkg-config --cflags --libs libsystemd libpulse`
 
 LDFLAGS := $(PKGCONFIG_LIBS) 
 
