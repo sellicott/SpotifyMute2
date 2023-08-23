@@ -54,7 +54,8 @@ typedef struct
     } while ( 0 )
 
 int bus_print_property( const char *name, sd_bus_message *property );
-int bus_print_sv_array( sd_bus_message *msg );
 int bus_read_sv_array( dbus_sv_array_t **sv, sd_bus_message *msg );
+int bus_free_sv_array( dbus_sv_array_t **sv );
+int bus_print_sv_array( const dbus_sv_array_t *sv );
 
 #endif // SDE_DBUS_UTILS_H

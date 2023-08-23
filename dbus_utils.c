@@ -5,219 +5,13 @@
 
 #include "dbus_utils.h"
 
-int bus_print_property( const char *name, sd_bus_message *property )
-{
-    char type;
-    const char *contents;
-    int r;
+// function prototypes
+int bus_free_sv( dbus_sv_t *sv );
+int bus_read_s_array( char **str_ptr, sd_bus_message *msg );
+int bus_read_v( dbus_v_t *v, char *type, bool *need_free, sd_bus_message *msg );
+int bus_read_sv( dbus_sv_t *sv, sd_bus_message *msg );
 
-
-    r = sd_bus_message_peek_type( property, &type, &contents );
-    if ( r < 0 )
-        return r;
-
-    switch ( type )
-    {
-
-        case SD_BUS_TYPE_STRING:
-        {
-            const char *s;
-
-            r = sd_bus_message_read_basic( property, type, &s );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s=%s\n", name, s );
-
-            return 1;
-        }
-
-        case SD_BUS_TYPE_BOOLEAN:
-        {
-            bool b;
-
-            r = sd_bus_message_read_basic( property, type, &b );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s\n", name );
-
-            return 1;
-        }
-
-        case SD_BUS_TYPE_INT64:
-        {
-            int64_t i64;
-
-            r = sd_bus_message_read_basic( property, type, &i64 );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s=%i\n", name, (int)i64 );
-            return 1;
-        }
-
-        case SD_BUS_TYPE_INT32:
-        {
-            int32_t i;
-
-            r = sd_bus_message_read_basic( property, type, &i );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s=%i\n", name, (int)i );
-            return 1;
-        }
-
-        case SD_BUS_TYPE_OBJECT_PATH:
-        {
-            const char *p;
-
-            r = sd_bus_message_read_basic( property, type, &p );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s=%s\n", name, p );
-
-            return 1;
-        }
-
-        case SD_BUS_TYPE_DOUBLE:
-        {
-            double d;
-
-            r = sd_bus_message_read_basic( property, type, &d );
-            if ( r < 0 )
-                return r;
-
-            printf( "%s=%g\n", name, d );
-            return 1;
-        }
-
-        case SD_BUS_TYPE_ARRAY:
-            if ( strcmp( contents, "s" ) == 0 )
-            {
-                bool first = true;
-                const char *str;
-
-                r = sd_bus_message_enter_container( property,
-                                                    SD_BUS_TYPE_ARRAY,
-                                                    contents );
-                if ( r < 0 )
-                    return r;
-
-                while ( ( r = sd_bus_message_read_basic( property,
-                                                         SD_BUS_TYPE_STRING,
-                                                         &str ) ) > 0 )
-                {
-                    if ( first )
-                        printf( "%s=", name );
-
-                    printf( "%s%s", first ? "" : " ", str );
-
-                    first = false;
-                }
-                if ( r < 0 )
-                    return r;
-
-                if ( first )
-                    printf( "%s=", name );
-                if ( !first )
-                    puts( "" );
-
-                r = sd_bus_message_exit_container( property );
-                if ( r < 0 )
-                    return r;
-
-                return 1;
-            }
-            else
-            {
-                printf( "array unreadable" );
-                return 0;
-            }
-
-            break;
-
-        default:
-            fprintf( stderr, "Error, default case" );
-    }
-
-    return 0;
-}
-
-int bus_print_sv_array( sd_bus_message *msg )
-{
-    sd_bus_error err = SD_BUS_ERROR_NULL;
-    int ret = 0;
-
-    ret = sd_bus_message_enter_container( msg, SD_BUS_TYPE_ARRAY, "{sv}" );
-    if ( ret < 0 )
-        goto cleanup;
-
-    while ( ( ret = sd_bus_message_enter_container( msg,
-                                                    SD_BUS_TYPE_DICT_ENTRY,
-                                                    "sv" ) ) > 0 )
-    {
-        const char *name;
-        const char *contents;
-
-        ret = sd_bus_message_read_basic( msg, SD_BUS_TYPE_STRING, &name );
-        if ( ret < 0 )
-            goto cleanup;
-
-
-        ret = sd_bus_message_peek_type( msg, NULL, &contents );
-        if ( ret < 0 )
-            goto cleanup;
-
-        ret = sd_bus_message_enter_container( msg,
-                                              SD_BUS_TYPE_VARIANT,
-                                              contents );
-        if ( ret < 0 )
-            goto cleanup;
-
-        ret = bus_print_property( name, msg );
-        if ( ret < 0 )
-            goto cleanup;
-
-        if ( ret == 0 )
-        {
-            printf( "%s=[unprintable]\n", name );
-            /* skip what we didn't read */
-            ret = sd_bus_message_skip( msg, contents );
-            if ( ret < 0 )
-                goto cleanup;
-        }
-
-        ret = sd_bus_message_exit_container( msg );
-        if ( ret < 0 )
-            goto cleanup;
-
-
-        ret = sd_bus_message_exit_container( msg );
-        if ( ret < 0 )
-            goto cleanup;
-    }
-    if ( ret < 0 )
-        goto cleanup;
-
-    ret = sd_bus_message_exit_container( msg );
-    if ( ret < 0 )
-        goto cleanup;
-
-cleanup:
-    if ( err._need_free != 0 )
-    {
-        printf( "%d \n", ret );
-        printf( "returned error: %s\n", err.message );
-    }
-    sd_bus_error_free( &err );
-
-    return ret < 0 ? -EXIT_FAILURE : EXIT_SUCCESS;
-}
-
-int bus_read_s_array( char *str, sd_bus_message *msg )
+int bus_read_s_array( char **str_ptr, sd_bus_message *msg )
 {
     int ret = 0;
 
@@ -234,13 +28,35 @@ int bus_read_s_array( char *str, sd_bus_message *msg )
     // read data until we run out
     while ( true )
     {
-        ret = sd_bus_message_read_basic( msg, 's', (void *)str );
+        // read string
+        const char *tmp_str = NULL;
+        ret = sd_bus_message_read_basic( msg, 's', (void *)&tmp_str );
         if ( ret < 0 )
         {
             fprintf( stderr,
                      "Error reading varient value: %s\n",
                      strerror( -ret ) );
             goto exit_container;
+        }
+        // if we got a valid string
+        else if ( tmp_str )
+        {
+            // two cases, empty string, and concatenation
+            if ( !( *str_ptr ) )
+            {
+                *str_ptr = malloc( strlen( tmp_str ) + 1 );
+                strcpy( *str_ptr, tmp_str );
+            }
+            else
+            {
+                // copy over the string, reallocating enough space for both plus
+                // the null character and a comma
+                *str_ptr = realloc( *str_ptr,
+                                    strlen( *str_ptr ) + strlen( ", " ) +
+                                        strlen( tmp_str ) + 1 );
+                strcat( *str_ptr, ", " );
+                strcat( *str_ptr, tmp_str );
+            }
         }
         // out of data
         else if ( ret == 0 )
@@ -255,6 +71,7 @@ exit_container:
 no_cleanup:
     return ret;
 }
+
 int bus_read_v( dbus_v_t *v, char *type, bool *need_free, sd_bus_message *msg )
 {
     int ret = 0;
@@ -298,11 +115,13 @@ int bus_read_v( dbus_v_t *v, char *type, bool *need_free, sd_bus_message *msg )
         goto no_cleanup;
     }
 
+
     // check if we have a string array
     // if we do, concatenate into a single list
     if ( strcmp( contents_type, "as" ) == 0 )
     {
-        ret = bus_read_s_array( v->s, msg );
+        char *tmp_str = NULL;
+        ret = bus_read_s_array( &tmp_str, msg );
         if ( ret < 0 )
         {
             fprintf( stderr,
@@ -314,6 +133,10 @@ int bus_read_v( dbus_v_t *v, char *type, bool *need_free, sd_bus_message *msg )
             }
             goto exit_container;
         }
+        v->s = tmp_str;
+        *type = 's';
+        *need_free = true;
+        ret = EXIT_SUCCESS;
     }
     // read single varient type
     else
@@ -326,7 +149,7 @@ int bus_read_v( dbus_v_t *v, char *type, bool *need_free, sd_bus_message *msg )
                      strerror( -ret ) );
             if ( ret == -EINVAL )
             {
-                printf( "varient type: %s\n", contents_type );
+                fprintf( stderr, "varient type: %s\n", contents_type );
             }
             goto exit_container;
         }
@@ -502,16 +325,136 @@ memory_cleanup:
     if ( sv && ret < 0 )
     {
         // todo recursively free structure
-        free( sv );
+        bus_free_sv_array( &sv );
+        sv = NULL;
     }
-    else
-    {
-        *asv_ptr = sv;
-    }
+    *asv_ptr = sv;
 
 exit_container:
     // exit varient
     ret = sd_bus_message_exit_container( msg );
+
+no_cleanup:
+    return ret;
+}
+
+/*
+ * Free a sv (string, value) dictionary
+ *
+ * Returns: 0 (`EXIT_SUCCESS`) if entry were freed, a negative value
+ * (`EXIT_FAILURE`) if invalid.
+ */
+int bus_free_sv( dbus_sv_t *sv )
+{
+    int ret = EXIT_SUCCESS;
+    if ( !sv )
+    {
+        ret = -EXIT_FAILURE;
+        goto no_cleanup;
+    }
+
+    // always cleanup the entry name string
+    free( sv->s );
+    sv->s = NULL;
+
+    // possibly cleanup the value
+    if ( sv->need_free )
+    {
+        free( sv->v.s );
+        sv->v.s = NULL;
+    }
+
+no_cleanup:
+    return ret;
+}
+
+
+/*
+ * Free a sv (string, value) dictionary array
+ *
+ * Returns: 0 (`EXIT_SUCCESS`) if array was freed, a negative value
+ * (`EXIT_FAILURE`) if invalid.
+ */
+int bus_free_sv_array( dbus_sv_array_t **sv_array_ptr )
+{
+    int ret = EXIT_SUCCESS;
+
+    if ( !sv_array_ptr )
+    {
+        ret = -EXIT_FAILURE;
+        goto no_cleanup;
+    }
+
+    // check for a valid sv array
+    dbus_sv_array_t *sv_array = *sv_array_ptr;
+    if ( !sv_array )
+    {
+        // array has already been freed
+        ret = EXIT_SUCCESS;
+        goto no_cleanup;
+    }
+
+    // loop through the array members, recursively freeing them
+    for ( int i = 0; i < sv_array->len; ++i )
+    {
+        dbus_sv_t *sv = &sv_array->sv_array[i];
+
+        // free the inner dict contents
+        bus_free_sv( sv );
+    }
+
+    // free the containing structure
+    free( sv_array );
+
+    // null the container
+    *sv_array_ptr = NULL;
+
+no_cleanup:
+    return ret;
+}
+
+/*
+ * Prints the contents of a `dbus_sv_array_t` struct.
+ *
+ * Takes a const pointer to an sv_array struct (array of string,value
+ * dictionaries). The values in the pointer are not modified.
+ *
+ * Returns: 0 (`EXIT_SUCCESS`) if values were printed, a negative value
+ * (`EXIT_FAILURE`) if invalid.
+ */
+int bus_print_sv_array( const dbus_sv_array_t *sv_array )
+{
+    int ret = EXIT_SUCCESS;
+    // check for a valid sv array
+    if ( !sv_array )
+    {
+        ret = -EXIT_FAILURE;
+        goto no_cleanup;
+    }
+
+    for ( int i = 0; i < sv_array->len; ++i )
+    {
+        const dbus_sv_t *sv = &sv_array->sv_array[i];
+        if ( sv )
+        {
+            if ( sv->v_type == 's' )
+            {
+                printf( "%20s: %s\n", sv->s, sv->v.s );
+            }
+            else if ( sv->v_type == 'd' )
+            {
+                printf( "%20s: %lf\n", sv->s, sv->v.d );
+            }
+            else if ( sv->v_type == 'i' )
+            {
+                printf( "%20s: %d\n", sv->s, sv->v.i );
+            }
+            else
+            {
+                printf( "%20s: null\n", sv->s );
+            }
+        }
+    }
 
 no_cleanup:
     return ret;
