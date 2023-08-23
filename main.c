@@ -11,6 +11,9 @@
 
 #include "dbus_utils.h"
 
+// include pulse audio so we can mute spotify
+#include "pactl.h"
+
 // We need to implement functions to read about Spotify on dbus using the
 // org.mpris.MediaPlayer2 Interface.
 // Documentation about the interface is availible here:
@@ -165,15 +168,22 @@ cleanup:
 
 int main( int argc, char **argv )
 {
+    (void)( argc );
+    (void)( argv );
     // TODO use getopt to parse command line arguments
     // we need to start by connecting to the system message bus and looking
     // for spotify
     char **instance_names = NULL;
     dbus_sv_array_t *metadata = NULL;
-
     sd_bus_error error = SD_BUS_ERROR_NULL;
     sd_bus *bus_ptr;
     int ret;
+
+    init_pactl();
+    wait_for_context();
+
+    // while ( 1 )
+    // {
     ret = sd_bus_default_user( &bus_ptr );
     if ( ret < 0 )
     {
@@ -208,6 +218,48 @@ int main( int argc, char **argv )
 
     printf( "%20s \n", "Metadata:" );
     bus_print_sv_array( metadata );
+    puts( "" );
+
+    // loop through the metadata and try and find an ad
+    for ( int i = 0; i < metadata->len; ++i )
+    {
+        const char *track_name_id = "mpris:trackid";
+        const char *ad_prefix = "spotify:ad:";
+
+        const char *param = metadata->sv_array[i].s;
+        const char *track_name = metadata->sv_array[i].v.s;
+
+        if ( strncmp( track_name_id, param, strlen( track_name_id ) ) == 0 )
+        {
+            printf( "current track: %s\n", track_name );
+            sd_bus_message *msg = NULL;
+            sd_bus_error err = SD_BUS_ERROR_NULL;
+            if ( strncmp( ad_prefix, track_name, strlen( ad_prefix ) ) == 0 )
+            {
+                // mute spotify by setting it's output volume to 0
+                printf( "Ad found, muting\n" );
+                set_mute( 1 );
+            }
+            // otherwise unmute spotify
+            else
+            {
+                printf( "No ad found, unmuting\n" );
+                set_mute( 0 );
+            }
+            if ( ret < 0 )
+            {
+                fprintf( stderr,
+                         "Error setting Spotify volume: %s\n",
+                         err.message );
+            }
+
+            sd_bus_error_free( &err );
+            sd_bus_message_unref( msg );
+        }
+    }
+    // sleep( 2 );
+    // printf( "\x0C" );
+    //}
 
 cleanup_instances:
     FREE_DBUS_STRV( instance_names );
@@ -216,6 +268,8 @@ cleanup_instances:
 cleanup:
     sd_bus_error_free( &error );
     sd_bus_unref( bus_ptr );
+
+    drain();
 
     return ret < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
