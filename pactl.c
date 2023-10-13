@@ -28,7 +28,11 @@ pa_proplist *proplist = NULL;
 pa_context *context = NULL;
 char context_ready;
 pa_mainloop_api *mainloop_api = NULL;
-int sink_input_idx;
+
+#define NUM_SINKS 100
+int sink_input_idx[NUM_SINKS];
+int found_sinks;
+
 int retry_update;
 int pending_update;
 int pending_mute;
@@ -96,15 +100,16 @@ void get_sink_input_info_callback( pa_context *c,
         fprintf( stderr,
                  "get_sink_input_info_callback(): Spotify is %u\n",
                  i->index );
-        sink_input_idx = i->index;
+        sink_input_idx[found_sinks++] = i->index;
         if ( pending_update )
         {
             pending_update = 0;
-            pa_operation_unref( pa_context_set_sink_input_mute( context,
-                                                                sink_input_idx,
-                                                                pending_mute,
-                                                                mute_callback,
-                                                                NULL ) );
+            pa_operation_unref(
+                pa_context_set_sink_input_mute( context,
+                                                sink_input_idx[found_sinks - 1],
+                                                pending_mute,
+                                                mute_callback,
+                                                NULL ) );
         }
     }
 }
@@ -172,13 +177,19 @@ void set_mute( int mute )
 {
     if ( context_ready )
     {
-        retry_update = 1;
-        pending_mute = mute;
-        pa_operation_unref( pa_context_set_sink_input_mute( context,
-                                                            sink_input_idx,
-                                                            mute,
-                                                            mute_callback,
-                                                            NULL ) );
+        // loop through the found sinks and mute them
+        for ( int i = 0; i < found_sinks; ++i )
+        {
+
+            retry_update = 1;
+            pending_mute = mute;
+            pa_operation_unref(
+                pa_context_set_sink_input_mute( context,
+                                                sink_input_idx[i],
+                                                mute,
+                                                mute_callback,
+                                                NULL ) );
+        }
     }
     else
         fprintf( stderr, "context is not ready\n" );
@@ -188,6 +199,12 @@ void init_pactl( void )
 {
     int s;
     pthread_t thread;
+
+    found_sinks = 0;
+    for ( int i = 0; i < NUM_SINKS; ++i )
+    {
+        sink_input_idx[i] = -1;
+    }
     s = pthread_create( &thread, NULL, pactl, NULL );
     if ( s != 0 )
     {
@@ -212,4 +229,5 @@ void wait_for_context( void )
             res = nanosleep( &ts, &ts );
         } while ( res && errno == EINTR );
     }
+    update_sink();
 }
