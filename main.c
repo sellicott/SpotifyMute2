@@ -234,7 +234,8 @@ int main( int argc, char **argv )
             printf( "current track: %s\n", track_name );
             sd_bus_message *msg = NULL;
             sd_bus_error err = SD_BUS_ERROR_NULL;
-            if ( strncmp( ad_prefix, track_name, strlen( ad_prefix ) ) == 0 )
+            if ( strncmp( ad_prefix, track_name, strlen( ad_prefix ) ) == 0 ||
+                 strstr( track_name, "/ad/" ) )
             {
                 // mute spotify by setting it's output volume to 0
                 printf( "Ad found, muting\n" );
